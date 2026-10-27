@@ -7,6 +7,8 @@
 
 ![掌机界面](docs/preview_200.png)
 
+**▶ 实机演示视频**（67 秒：地图选点 → 掌机缩放 → 户外找珠 → `FOUND >>DRAGON<<`）：[docs/demo.mp4](docs/demo.mp4)
+
 ---
 
 ## 特性
