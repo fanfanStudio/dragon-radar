@@ -1,6 +1,6 @@
 # 龙珠雷达 Dragon Radar
 
-> 用一台掌机 + 一部手机，在现实世界找龙珠。
+> 用一台TrimUI Brick Pro掌机 + 一部手机，在现实世界找龙珠。
 > 手机负责 GPS 定位与地图选点，掌机负责那台动画里一模一样的怀表雷达：绿屏、网格、滴滴声，走到 20 米内还会长鸣锁定。
 
 **A real-world Dragon Radar**: an Android phone supplies GPS + map-picked "dragon ball" positions over Wi-Fi, and a handheld console renders an anime-accurate pocket-watch radar with proximity beeps, range zoom, and lock-on detection.
@@ -51,7 +51,7 @@ TCP 9000，换行分隔 JSON。
 手机 → 掌机（300 ms/帧）：
 
 ```json
-{"la":34.210000,"lo":108.950000,"acc":8.0,"hdg":90.0,"balls":[[34.2110,108.9510,1],[34.2080,108.9470,2]]}
+{"la":39.908700,"lo":116.397500,"acc":8.0,"hdg":90.0,"balls":[[39.9095,116.3985,1],[39.9078,116.3960,2]]}
 {"cmd":"clear"}
 ```
 
