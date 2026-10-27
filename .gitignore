@@ -1,14 +1,14 @@
-# 构建产物
-build/
+# 构建产物（仅根目录/构建目录，勿写成裸名字：包路径 com/dragonradar 会被误伤）
+/build/
 *.o
 *.exe
 *.pdb
 *.elf
-dragonradar
+/dragonradar
 
-# 预览自检产物
-*.bmp
-preview_*.png
+# 预览自检产物（只在仓库根目录生成）
+/*.bmp
+/preview_*.png
 
 # Android / Gradle
 .gradle/
