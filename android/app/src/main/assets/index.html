@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>龙珠雷达 · 控制端</title>
+<link rel="stylesheet" href="leaflet.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; font-family:"Microsoft YaHei",-apple-system,sans-serif; background:#0d1117; }
+  #map { position:absolute; inset:0; }
+  #status {
+    position:absolute; top:calc(env(safe-area-inset-top,0px) + 10px); left:10px; right:10px; z-index:1000;
+    display:flex; gap:8px; pointer-events:none;
+  }
+  .pill {
+    background:rgba(13,17,23,0.82); color:#8DFFBE; border:1px solid rgba(141,255,190,0.25);
+    border-radius:20px; padding:6px 12px; font-size:12px; display:flex; align-items:center; gap:6px;
+    backdrop-filter:blur(6px);
+  }
+  .dot { width:8px; height:8px; border-radius:50%; background:#555; flex:none; }
+  .dot.on { background:#3DFF8B; box-shadow:0 0 6px #3DFF8B; }
+  .pill.warn { color:#FFD54F; border-color:rgba(255,213,79,0.35); }
+  #panel {
+    position:absolute; left:0; right:0; bottom:0; z-index:1000;
+    background:rgba(13,17,23,0.92); backdrop-filter:blur(10px);
+    border-top:1px solid rgba(141,255,190,0.2);
+    padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
+    max-height:42vh; display:flex; flex-direction:column; gap:8px;
+  }
+  #btnrow { display:flex; gap:8px; }
+  button {
+    flex:1; border:none; border-radius:10px; padding:12px 0; font-size:14px; font-weight:600;
+    background:#1d2733; color:#cde8d9; cursor:pointer;
+  }
+  button.primary { background:#0d4d2b; color:#8DFFBE; }
+  button.danger  { background:#3a1518; color:#ff9a9a; }
+  button:active { filter:brightness(1.25); }
+  #hint { color:#5b7a6b; font-size:11px; text-align:center; }
+  #list { overflow-y:auto; flex:1; min-height:0; }
+  .row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 4px; border-bottom:1px solid rgba(141,255,190,0.08); font-size:13px; color:#cde8d9;
+  }
+  .row .nm { display:flex; align-items:center; gap:8px; }
+  .row .bdot {
+    width:14px; height:14px; border-radius:50%; background:#FFFFCC;
+    box-shadow:0 0 8px #FFFF88; color:#6b5a00; font-size:9px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; flex:none;
+  }
+  .row.found { opacity:0.45; }
+  .row .tag { color:#FFD54F; font-size:11px; margin-right:8px; }
+  .row .ds { color:#8DFFBE; font-variant-numeric:tabular-nums; }
+  .row.empty { color:#46586a; justify-content:center; font-size:12px; cursor:default; }
+  /* 龙珠标记 */
+  .ball-icon {
+    width:30px; height:30px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #FFFFF2, #FFEC7A 55%, #E8B93C);
+    border:2px solid #C79A1E; color:#7a5c00; font-weight:800; font-size:13px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 14px rgba(255,255,140,0.9);
+  }
+  .ball-icon.found { opacity:0.35; box-shadow:none; }
+  .me-icon { color:#CC0000; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="status">
+  <div class="pill" id="pillLink"><span class="dot" id="dotLink"></span><span id="txtLink">等待掌机…</span></div>
+  <div class="pill" id="pillGps"><span class="dot" id="dotGps"></span><span id="txtGps">GPS —</span></div>
+</div>
+
+<div id="panel">
+  <div id="list"></div>
+  <div id="btnrow">
+    <button class="primary" id="btnLocate">📍 定位到我</button>
+    <button class="danger" id="btnClear">清空龙珠</button>
+  </div>
+  <div id="hint">点地图放龙珠（最多 7 颗）· 进入 20m 掌机长鸣即找到</div>
+</div>
+
+<script src="leaflet.js"></script>
+<script>
+'use strict';
+const FOUND_R = 20;
+let map, meMarker = null, meAccCircle = null, lockRing = null;
+const ballMarkers = new Map();
+let balls = [];        // {lat,lng,id}
+let foundIds = new Set();
+let me = null;         // {lat,lng,acc}
+let nextId = 1;
+let have = false;
+
+/* ---------------- 地图 ---------------- */
+function initMap() {
+  const tileUrls = ['https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                    'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'];
+  map = L.map('map', { zoomControl: false, attributionControl: false }).setView([39.9087, 116.3975], 16);
+  L.tileLayer(tileUrls[0], { maxZoom: 19, subdomains: ['1','2','3','4'],
+    url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+  }).addTo(map);
+
+  map.on('click', function(e){
+    if (balls.length >= 7) { DR.toast('最多 7 颗龙珠'); return; }
+    addBall(e.latlng.lat, e.latlng.lng);
+  });
+  syncMeLayers();
+}
+
+function syncMeLayers() {
+  if (!me) return;
+  const ll = [me.lat, me.lng];
+  if (!meMarker) {
+    meMarker = L.marker(ll, {
+      icon: L.divIcon({ className: 'me-icon', iconSize: [34,34],
+        html: '<svg width="34" height="34" viewBox="0 0 34 34"><polygon points="17,4 27,29 17,22 7,29" fill="#CC0000" stroke="#7a0000" stroke-width="1"/></svg>' }),
+      interactive: false, zIndexOffset: 900
+    }).addTo(map);
+    meAccCircle = L.circle(ll, { radius: Math.max(me.acc||0, 5), color:'#4DFF9A', weight:1, fillOpacity:0.08 }).addTo(map);
+    lockRing = L.circle(ll, { radius: FOUND_R, color:'#FFD54F', weight:2, dashArray:'6 6', fill:false }).addTo(map);
+  } else {
+    meMarker.setLatLng(ll);
+    meAccCircle.setLatLng(ll).setRadius(Math.max(me.acc||0, 5));
+    lockRing.setLatLng(ll);
+  }
+}
+
+function ballIconHtml(n, found) {
+  return '<div class="ball-icon' + (found ? ' found' : '') + '">' + n + '</div>';
+}
+function num(id) { return balls.findIndex(b => b.id === id) + 1; }
+
+function renderBalls() {
+  for (const [id, m] of ballMarkers) {
+    const b = balls.find(x => x.id === id);
+    if (!b) { map.removeLayer(m); ballMarkers.delete(id); }
+  }
+  balls.forEach(function(b){
+    const n = num(b.id);
+    const found = foundIds.has(b.id);
+    let m = ballMarkers.get(b.id);
+    if (!m) {
+      m = L.marker([b.lat, b.lng], {
+        icon: L.divIcon({ className:'', iconSize:[30,30], html: ballIconHtml(n, found) })
+      }).addTo(map);
+      ballMarkers.set(b.id, m);
+    } else {
+      m.setLatLng([b.lat, b.lng]);
+      m.setIcon(L.divIcon({ className:'', iconSize:[30,30], html: ballIconHtml(n, found) }));
+    }
+  });
+}
+
+/* ---------------- 列表 ---------------- */
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = Math.PI/180;
+  const dLa = (lat2-lat1)*rad, dLo = (lng2-lng1)*rad;
+  const a = Math.sin(dLa/2)**2 + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLo/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function renderList() {
+  const el = document.getElementById('list');
+  if (!balls.length) {
+    el.innerHTML = '<div class="row empty">还没有龙珠 — 点地图放一颗</div>';
+    return;
+  }
+  let html = '';
+  balls.forEach(function(b){
+    const n = num(b.id), found = foundIds.has(b.id);
+    const d = me ? haversine(me.lat, me.lng, b.lat, b.lng) : null;
+    const ds = d === null ? '—' : (d >= 1000 ? (d/1000).toFixed(2)+'km' : d.toFixed(1)+'m');
+    html += '<div class="row' + (found?' found':'') + '">' +
+      '<span class="nm"><span class="bdot">' + n + '</span>' + n + '号星球</span>' +
+      '<span>' + (found ? '<span class="tag">已找到</span>' : '') +
+      '<span class="ds">' + ds + '</span></span></div>';
+  });
+  el.innerHTML = html;
+}
+
+/* ---------------- 交互 ---------------- */
+function addBall(lat, lng) {
+  balls.push({ lat: lat, lng: lng, id: nextId++ });
+  DR.setBalls(JSON.stringify(balls.map(b => [b.lat, b.lng, b.id])));
+  renderBalls(); renderList();
+}
+
+document.getElementById('btnClear').onclick = function(){
+  if (!balls.length) return;
+  balls = []; foundIds = new Set();
+  DR.clearBalls();
+  renderBalls(); renderList();
+  DR.toast('已清空两端龙珠');
+};
+document.getElementById('btnLocate').onclick = function(){
+  if (me) { map.panTo([me.lat, me.lng]); }
+  else DR.toast('还没有 GPS 定位');
+};
+
+/* ---------------- 状态轮询 ---------------- */
+function poll() {
+  let s = null;
+  try { s = JSON.parse(DR.snapshot()); } catch (e) { return; }
+  foundIds = new Set(s.found || []);
+  if (s.have) {
+    me = { lat: s.la, lng: s.lo, acc: s.acc };
+    if (!have) { map.setView([me.lat, me.lng], 16); have = true; }
+    syncMeLayers();
+  }
+  const link = document.getElementById('dotLink');
+  const txtLink = document.getElementById('txtLink');
+  if (s.link) { link.className = 'dot on'; txtLink.textContent = '掌机已连接'; }
+  else {
+    link.className = 'dot';
+    txtLink.textContent = s.ip ? '等待掌机 · ' + s.ip + ':9000' : '等待掌机…';
+  }
+
+  const dotG = document.getElementById('dotGps');
+  const txtG = document.getElementById('txtGps');
+  if (me) {
+    dotG.className = 'dot on';
+    txtG.textContent = 'GPS ±' + Math.round(s.acc) + 'm · ' + balls.length + '/7 珠';
+  } else {
+    dotG.className = 'dot';
+    txtG.textContent = s.gpsOn ? 'GPS 搜索中…' : 'GPS 未开启';
+  }
+  renderBalls(); renderList();
+}
+
+initMap();
+renderList();
+setInterval(poll, 400);
+</script>
+</body>
+</html>

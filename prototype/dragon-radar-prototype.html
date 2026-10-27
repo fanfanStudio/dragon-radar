@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>龙珠雷达 · Brick Pro 原型 V6（手机端真实地图）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;min-height:100vh;padding:20px 20px 46px;color:#c8d6e2;
+       background:radial-gradient(circle at 28% -10%,#12202b 0%,#080c11 55%,#05080b 100%);
+       font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;}
+  .topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:1240px;margin:0 auto 16px;}
+  .topbar h1{margin:0;font-size:16px;font-weight:600;color:#e8f2fa;letter-spacing:.4px;}
+  .topbar h1 small{font-weight:400;font-size:12px;color:#68798b;margin-left:8px;letter-spacing:0;}
+  .spacer{flex:1;}
+  .btn{cursor:pointer;border:1px solid #2b3c4a;background:#151f28;color:#b9cfe0;border-radius:8px;
+       padding:7px 13px;font-size:13px;font-family:inherit;transition:.15s;}
+  .btn:hover{border-color:#3d6f8f;color:#e8f8ff;}
+  .btn.on{background:#0f3a25;border-color:#2f9060;color:#7fffb4;}
+  .wrap{display:flex;gap:26px;align-items:flex-start;justify-content:center;flex-wrap:wrap;max-width:1240px;margin:0 auto;}
+
+  .device{flex:1 1 640px;max-width:740px;min-width:420px;}
+  .bezel{background:linear-gradient(#1e2833,#0f151c);border:1px solid #2b3742;border-radius:22px;
+         padding:15px 15px 10px;box-shadow:0 26px 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.06);}
+  #radar{width:100%;height:auto;display:block;border-radius:5px;background:#000;
+         box-shadow:0 0 0 1px #000;}
+  .bezel .cap{display:flex;justify-content:space-between;font-size:11px;color:#5b6d7e;margin-top:8px;letter-spacing:.6px;}
+
+  /* ---------- 手机端（真实地图） ---------- */
+  .phone{flex:0 0 340px;width:340px;background:linear-gradient(#1e2833,#0f151c);border:1px solid #2b3742;
+         border-radius:32px;padding:10px;box-shadow:0 26px 60px rgba(0,0,0,.7);}
+  .pscreen{background:#0a1117;border-radius:24px;overflow:hidden;border:1px solid #1a2731;display:flex;flex-direction:column;}
+  .pbar{display:flex;justify-content:space-between;font-size:10px;color:#5f7284;padding:7px 14px 5px;}
+  .phead{padding:2px 14px 8px;display:flex;justify-content:space-between;align-items:center;}
+  .phead b{font-size:14px;color:#dcecf8;font-weight:600;}
+  .phead b span{color:#3dff8b;font-size:10px;margin-left:6px;font-weight:400;}
+  .chips{display:flex;gap:6px;padding:0 14px 8px;flex-wrap:wrap;}
+  .chip{font-size:10px;padding:3px 8px;border-radius:20px;background:#12202a;border:1px solid #22333f;color:#7e93a5;}
+  .chip.ok{border-color:#1f6b45;color:#5ce59a;background:#0d2a1c;}
+  #map{width:100%;height:300px;background:#e8e6df;cursor:crosshair;}
+  .mapmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+          font-size:12px;color:#8a97a5;background:#10161c;padding:20px;text-align:center;z-index:500;}
+  .phint{font-size:10px;color:#5f7284;padding:6px 14px 7px;border-bottom:1px solid #142029;}
+  .plist{list-style:none;margin:0;padding:5px 10px 2px;max-height:118px;overflow:auto;}
+  .plist li{display:flex;justify-content:space-between;align-items:center;gap:6px;
+            font-size:11px;padding:5px 5px;border-radius:6px;color:#9db2c4;cursor:pointer;}
+  .plist li:hover{background:#101b23;}
+  .plist li+li{border-top:1px solid #101b23;}
+  .plist .nm{display:flex;align-items:center;gap:6px;}
+  .plist .dot{width:7px;height:7px;border-radius:50%;background:#ffffcc;box-shadow:0 0 6px #ffff66;}
+  .plist .ds{color:#cfe3f2;font-variant-numeric:tabular-nums;}
+  .plist .tag{font-size:9px;color:#003300;background:#ffffcc;border-radius:4px;padding:1px 4px;}
+  .pact{display:flex;gap:8px;padding:8px 12px 10px;}
+  .pact .btn{flex:1;padding:8px 6px;font-size:12px;text-align:center;}
+  .pfoot{font-size:9px;color:#46586a;padding:0 14px 12px;line-height:1.5;}
+
+  /* Leaflet 上的自定义标记 */
+  .dbball{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffff,#ffe98a 45%,#f5b31b);
+          border:2px solid #d8901a;box-shadow:0 0 10px rgba(255,200,60,.9);
+          display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#7a4b00;}
+  .memo{width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;
+        border-bottom:16px solid #ff3b30;filter:drop-shadow(0 0 4px rgba(255,60,48,.8));}
+  .leaflet-container{font:inherit;}
+  .leaflet-control-attribution{font-size:8px !important;opacity:.65;}
+
+  .legend{max-width:1240px;margin:16px auto 0;font-size:12px;color:#6d8092;text-align:center;line-height:1.8;}
+  .legend b{color:#a9c2d4;font-weight:500;}
+  .k{display:inline-block;padding:1px 6px;border:1px solid #2b3c4a;border-radius:4px;font-size:11px;color:#9fb6c8;background:#131c24;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>龙珠雷达 <small>Brick Pro 1024×768 · V6 手机端真实地图选点</small></h1>
+  <div class="spacer"></div>
+  <button class="btn" id="btnStart">▶ 开始演示（含声音）</button>
+  <button class="btn" id="btnWalk">自动行走：关</button>
+  <button class="btn" id="btnReset">重置</button>
+</div>
+
+<div class="wrap">
+
+  <section class="device">
+    <div class="bezel">
+      <canvas id="radar" width="1024" height="768"></canvas>
+      <div class="cap">
+        <span>TRIMUI BRICK PRO · 掌机端</span>
+        <span id="capRight">RANGE 200m · 3 颗龙珠</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="phone">
+    <div class="pscreen">
+      <div class="pbar"><span>21:31</span><span>5G ▮▮▮ 86%</span></div>
+      <div class="phead"><b>龙珠雷达 · 控制端<span>LIVE</span></b></div>
+      <div class="chips">
+        <span class="chip ok" id="chipGps">GPS ±4m</span>
+        <span class="chip ok">掌机在线 · 1</span>
+        <span class="chip">热点 2.4G</span>
+      </div>
+      <div style="position:relative;">
+        <div id="map"></div>
+        <div class="mapmsg" id="mapmsg">地图组件未能加载（CDN 不可达）。<br>真机 Android 端无此限制。</div>
+      </div>
+      <div class="phint">点地图任意位置 = 放置一颗龙珠 · 拖动红三角 = 移动我的位置</div>
+      <ul class="plist" id="plist"></ul>
+      <div class="pact">
+        <button class="btn" id="btnLocate">定位到我（GPS）</button>
+        <button class="btn" id="btnClear">清空龙珠</button>
+      </div>
+      <div class="pfoot">真机方案：Kotlin + 高德地图 SDK（统一 GCJ-02 坐标）或 osmdroid + 高德瓦片；
+        掌机只收经纬度本地算距离，不依赖任何在线服务。</div>
+    </div>
+  </section>
+</div>
+
+<div class="legend">
+  <b>手机端</b>：真实地图选点放龙珠 → 经纬度下发掌机 · <b>掌机端</b>：怀表雷达按真实距离/方位显示 ·
+  <span class="k">↑</span><span class="k">↓</span> = 掌机量程，<span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> = 走动，
+  <span class="k">空格</span> = 自动行走（演示：红三角朝最近龙珠移动）
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ================= 掌机画布 ================= */
+const cvs = document.getElementById('radar');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+const CX = 512, CY = 390;
+const R_OUT = 326;
+const R_SCR = 294;
+const KNOB  = {x: CX, y: 30};
+
+const ZOOMS = [20, 50, 100, 200, 500];
+const FOUND_R = 20;
+const TONE_MS = 5000;
+
+const C = {
+  shell:'#EFEFEF', shellLine:'#707070', shellRing:'#BCBCBC', shellDark:'#969696',
+  scr:'#009900', scrEdge:'#006B00', grid:'#003300',
+  dot:'#FFFFCC', dotGlow:'#FFFF66', label:'#FFFF66',
+  tri:'#CC0000',
+  hud:'#8DFFBE', hudDim:'rgba(150,215,185,0.62)', hudFaint:'rgba(140,200,170,0.42)',
+  big:'#4DFF9A'
+};
+
+/* 演示默认起点（真机 App 会用手机 GPS） */
+const FALLBACK = {lat: 39.9087, lng: 116.3975};
+
+const S = {
+  zi: 3,
+  rngNow: 200,
+  meLL: {lat: FALLBACK.lat, lng: FALLBACK.lng},
+  heading: 0,
+  walk: false,
+  lastBeep: 0,
+  flash: 0,
+  bannerT: 0,
+  bannerName: '',
+  showGrid: true,
+  audio: null,
+  balls: []
+};
+
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const range = ()=>ZOOMS[S.zi];
+
+const CELLS = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+function cellMeters(rng){
+  const pxm = (R_SCR - 6) / rng;
+  for(const m of CELLS) if(m * pxm >= 46) return m;
+  return 1000;
+}
+
+/* ---- 地理换算（局部平面近似，<10km 误差可忽略） ---- */
+function relMeters(ll){
+  const k = Math.cos(S.meLL.lat * Math.PI / 180);
+  return {
+    x: (ll.lng - S.meLL.lng) * 111320 * k,
+    y: (ll.lat - S.meLL.lat) * 110540
+  };
+}
+function offsetLL(ll, dx, dy){
+  return {
+    lat: ll.lat + dy / 110540,
+    lng: ll.lng + dx / (111320 * Math.cos(ll.lat * Math.PI / 180))
+  };
+}
+function ballDist(b){ const v = relMeters(b); return Math.hypot(v.x, v.y); }
+function nearest(){
+  let best = null, bd = Infinity;
+  for(const b of S.balls){
+    if(b.foundT) continue;
+    const d = ballDist(b);
+    if(d < bd){ bd = d; best = b; }
+  }
+  return {ball: best, d: bd};
+}
+
+/* ================= 声音 ================= */
+function audioOn(){
+  if(!S.audio){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) S.audio = new AC();
+  }
+  if(S.audio && S.audio.state === 'suspended') S.audio.resume();
+}
+function beep(){
+  if(!S.audio) return;
+  const t = S.audio.currentTime;
+  const o = S.audio.createOscillator(), g = S.audio.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(1080, t);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.12, t + 0.008);
+  g.gain.linearRampToValueAtTime(0, t + 0.062);
+  o.connect(g).connect(S.audio.destination);
+  o.start(t); o.stop(t + 0.08);
+}
+function longTone(){
+  if(!S.audio) return;
+  // 找到龙珠：与滴滴声同音色同音高(方波 1080Hz)，只是把时长拉长到 5s，不做变频
+  const t = S.audio.currentTime, dur = TONE_MS / 1000;
+  const o = S.audio.createOscillator(), g = S.audio.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(1080, t);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.12, t + 0.008);
+  g.gain.setValueAtTime(0.12, t + dur - 0.05);
+  g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(g).connect(S.audio.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+/* ================= 手机端：真实地图 ================= */
+let map = null, meMarker = null, meAcc = null, lockRing = null;
+let mapReady = false;
+
+function initMap(){
+  if(typeof L === 'undefined'){
+    document.getElementById('mapmsg').style.display = 'flex';
+    return;
+  }
+  map = L.map('map', {
+    zoomControl: true,
+    doubleClickZoom: false,
+    attributionControl: true
+  }).setView([S.meLL.lat, S.meLL.lng], 16);
+
+  L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: '1234',
+    maxZoom: 18,
+    attribution: '© 高德地图'
+  }).addTo(map);
+
+  lockRing = L.circle([S.meLL.lat, S.meLL.lng], {
+    radius: FOUND_R, color: '#FFD54F', weight: 2, dashArray: '6 6',
+    fillColor: '#FFD54F', fillOpacity: 0.06
+  }).addTo(map);
+
+  meAcc = L.circle([S.meLL.lat, S.meLL.lng], {
+    radius: 8, color: '#4FC3F7', weight: 1, fillColor: '#4FC3F7', fillOpacity: 0.25
+  }).addTo(map);
+
+  meMarker = L.marker([S.meLL.lat, S.meLL.lng], {
+    draggable: true,
+    icon: L.divIcon({className: '', html: '<div class="memo"></div>', iconSize: [18, 16], iconAnchor: [9, 15]})
+  }).addTo(map);
+
+  meMarker.on('drag dragend', function(){
+    S.meLL = meMarker.getLatLng();
+    syncMeLayers();
+    renderList();
+  });
+
+  map.on('click', function(e){
+    addBall(e.latlng.lat, e.latlng.lng);
+  });
+
+  mapReady = true;
+
+  // 已有龙珠补画标记
+  for(const b of S.balls) addBallMarker(b);
+}
+
+function syncMeLayers(){
+  if(!mapReady) return;
+  meMarker.setLatLng([S.meLL.lat, S.meLL.lng]);
+  meAcc.setLatLng([S.meLL.lat, S.meLL.lng]);
+  lockRing.setLatLng([S.meLL.lat, S.meLL.lng]);
+}
+
+const ballMarkers = new Map();
+function ballIcon(n){
+  return L.divIcon({className: '', html: '<div class="dbball">' + n + '</div>',
+                    iconSize: [26, 26], iconAnchor: [13, 13]});
+}
+function addBallMarker(b){
+  if(!mapReady || ballMarkers.has(b.id)) return;
+  const m = L.marker([b.lat, b.lng], {icon: ballIcon(b.num)}).addTo(map);
+  m.on('click', function(){ map.panTo([b.lat, b.lng]); });
+  ballMarkers.set(b.id, m);
+}
+function removeBallMarker(id){
+  const m = ballMarkers.get(id);
+  if(m){ map.removeLayer(m); ballMarkers.delete(id); }
+}
+
+function addBall(lat, lng){
+  if(S.balls.length >= 7) S.balls.shift();
+  const names = ['一','二','三','四','五','六','七'];
+  const b = {
+    id: Date.now() + Math.random(),
+    num: S.balls.length + 1,
+    name: names[S.balls.length] + '星球',
+    lat: lat, lng: lng, foundT: 0
+  };
+  S.balls.push(b);
+  addBallMarker(b);
+  renderList();
+}
+
+function locateMe(){
+  if(!navigator.geolocation){ return; }
+  navigator.geolocation.getCurrentPosition(function(p){
+    S.meLL = {lat: p.coords.latitude, lng: p.coords.longitude};
+    syncMeLayers();
+    document.getElementById('chipGps').textContent = 'GPS ±' + Math.round(p.coords.accuracy) + 'm';
+    if(mapReady) map.setView([S.meLL.lat, S.meLL.lng], 16);
+    renderList();
+  }, function(){ /* 拒绝/失败：保持演示位置 */ }, {enableHighAccuracy: true, timeout: 6000});
+}
+
+/* ================= 更新 ================= */
+function update(dt, now){
+  const nr = nearest();
+
+  const target = range();
+  if(Math.abs(S.rngNow - target) > 0.4){
+    S.rngNow += (target - S.rngNow) * Math.min(1, dt * 9);
+  } else {
+    S.rngNow = target;
+  }
+
+  // 自动行走：朝最近龙珠移动（真实经纬度换算米）
+  if(S.walk && nr.ball && nr.d > 2.5){
+    const v = relMeters(nr.ball);
+    const step = Math.min(nr.d - 2.0, 1.7 * dt);
+    const dx = v.x / nr.d * step, dy = v.y / nr.d * step;
+    S.meLL = offsetLL(S.meLL, dx, dy);
+    const tgt = Math.atan2(dx, dy);
+    let diff = tgt - S.heading;
+    while(diff >  Math.PI) diff -= Math.PI * 2;
+    while(diff < -Math.PI) diff += Math.PI * 2;
+    S.heading += diff * Math.min(1, dt * 6);
+    if(mapReady) syncMeLayers();
+  }
+
+  for(const b of S.balls){
+    if(b.foundT) continue;
+    const d = ballDist(b);
+    if(d <= FOUND_R){
+      b.foundT = now;
+      b.foundOrder = now;
+      S.bannerT = now;
+      S.bannerName = b.name;
+      longTone();
+    }
+  }
+
+  if(nr.ball && nr.d > FOUND_R){
+    const interval = clamp(nr.d * 8, 90, 1200);
+    if(now - S.lastBeep > interval){
+      S.lastBeep = now;
+      beep();
+      S.flash = 1;
+    }
+  }
+  S.flash = Math.max(0, S.flash - dt * 3.2);
+}
+
+/* ================= 掌机渲染 ================= */
+function drawShell(){
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, W, H);
+  const bg = ctx.createRadialGradient(CX, CY, 90, CX, CY, 620);
+  bg.addColorStop(0, 'rgba(20,46,32,0.55)');
+  bg.addColorStop(0.55, 'rgba(8,20,14,0.35)');
+  bg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.beginPath();
+  ctx.moveTo(CX-58, 92); ctx.lineTo(CX+58, 92);
+  ctx.lineTo(CX+46, 54);  ctx.lineTo(CX-46, 54);
+  ctx.closePath();
+  ctx.fillStyle = C.shellRing; ctx.fill();
+  ctx.strokeStyle = C.shellDark; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(KNOB.x-50, KNOB.y-22, 100, 46, 23);
+  else ctx.rect(KNOB.x-50, KNOB.y-22, 100, 46);
+  ctx.fillStyle = C.shell; ctx.fill();
+  ctx.strokeStyle = C.shellDark; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = C.shellRing;
+  ctx.fillRect(KNOB.x-35, KNOB.y+1, 70, 12);
+
+  ctx.beginPath(); ctx.arc(CX, CY, R_OUT, 0, Math.PI*2);
+  ctx.fillStyle = C.shell; ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = C.shellLine; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(CX, CY, R_OUT-13, 0, Math.PI*2);
+  ctx.lineWidth = 9; ctx.strokeStyle = C.shellRing; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(CX, CY, R_SCR+5, 0, Math.PI*2);
+  ctx.lineWidth = 11; ctx.strokeStyle = C.shellDark; ctx.stroke();
+}
+
+function drawScreen(now){
+  const rng = S.rngNow;
+  const pxm = (R_SCR - 6) / rng;
+  const cellM = cellMeters(rng);
+  const cellPx = cellM * pxm;
+
+  ctx.save();
+  ctx.beginPath(); ctx.arc(CX, CY, R_SCR, 0, Math.PI*2); ctx.clip();
+
+  const g = ctx.createRadialGradient(CX, CY, 25, CX, CY, R_SCR);
+  g.addColorStop(0, '#0AA70A');
+  g.addColorStop(0.72, C.scr);
+  g.addColorStop(1, C.scrEdge);
+  ctx.fillStyle = g;
+  ctx.fillRect(CX-R_SCR, CY-R_SCR, R_SCR*2, R_SCR*2);
+
+  if(S.showGrid){
+    const n = Math.ceil(R_SCR / cellPx);
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for(let i = -n; i <= n; i++){
+      const x1 = CX + i * cellPx;
+      if(x1 > CX - R_SCR && x1 < CX + R_SCR){
+        ctx.moveTo(x1, CY - R_SCR); ctx.lineTo(x1, CY + R_SCR);
+      }
+      const y1 = CY + i * cellPx;
+      if(y1 > CY - R_SCR && y1 < CY + R_SCR){
+        ctx.moveTo(CX - R_SCR, y1); ctx.lineTo(CX + R_SCR, y1);
+      }
+    }
+    ctx.stroke();
+  }
+
+  const nr = nearest();
+  if(nr.ball && nr.d > FOUND_R){
+    const v = relMeters(nr.ball);
+    const bx = CX + v.x * pxm, by = CY - v.y * pxm;
+    const L2 = Math.hypot(bx - CX, by - CY);
+    if(L2 > 8 && L2 < R_SCR - 10){
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,204,0.55)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 16]);
+      ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.setLineDash([]);
+      const sp = 44, off = (now * 0.09) % sp;
+      for(let d = off; d < L2; d += sp){
+        const t = d / L2;
+        ctx.beginPath();
+        ctx.arc(CX + (bx-CX)*t, CY + (by-CY)*t, 4, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,204,0.8)';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  for(const b of S.balls){
+    if(b.foundT) continue;          // 已找到的从雷达上消失
+    const d = ballDist(b);
+    const v = relMeters(b);
+    let gx = CX + v.x * pxm, gy = CY - v.y * pxm;
+    let off = false;
+    if(Math.hypot(gx - CX, gy - CY) > R_SCR - 26){
+      const a = Math.atan2(gy - CY, gx - CX);
+      gx = CX + Math.cos(a) * (R_SCR - 34);
+      gy = CY + Math.sin(a) * (R_SCR - 34);
+      off = true;
+    }
+    const found = d <= FOUND_R;
+    const pulse = found ? 1 : 0.55 + 0.45 * Math.sin(now / 240);
+
+    if(!off){
+      ctx.save();
+      ctx.shadowColor = C.dotGlow;
+      ctx.shadowBlur = found ? 46 : 26;
+      ctx.beginPath();
+      ctx.arc(gx, gy, found ? 17 : 14, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,204,' + pulse.toFixed(3) + ')';
+      ctx.fill();
+      ctx.restore();
+      // 编号拉开距离，避免和光点光晕打架
+      ctx.font = '700 29px "Microsoft YaHei",sans-serif';
+      ctx.fillStyle = C.label;
+      ctx.fillText(String(b.num), gx + 34, gy + 12);
+    } else {
+      // 超出量程：边缘画三角箭头（指向目标方向）
+      const a = Math.atan2(gy - CY, gx - CX);
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -13);
+      ctx.lineTo(10, 9);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-10, 9);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,204,0.42)';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(S.heading);
+  ctx.beginPath();
+  ctx.moveTo(0, -23); ctx.lineTo(16, 17); ctx.lineTo(0, 10); ctx.lineTo(-16, 17);
+  ctx.closePath();
+  ctx.fillStyle = C.tri;
+  ctx.fill();
+  ctx.restore();
+
+  if(S.flash > 0.02){
+    ctx.beginPath();
+    ctx.arc(CX + R_SCR - 52, CY - R_SCR + 52, 7 + 5 * S.flash, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,204,' + S.flash.toFixed(3) + ')';
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  drawBanner(now);
+  drawCorners(now);
+}
+
+function drawBanner(now){
+  const bt = now - S.bannerT;
+  if(!S.bannerT || bt >= 5200) return;
+  const k = bt < 300 ? bt/300 : (bt > 4700 ? (5200-bt)/500 : 1);
+  ctx.save();
+  ctx.globalAlpha = clamp(k, 0, 1);
+  ctx.textAlign = 'center';
+  ctx.font = '700 34px "Microsoft YaHei",sans-serif';
+  const title = '已找到 ' + S.bannerName;
+  const tw = ctx.measureText(title).width + 56;
+  const bx = CX - tw/2, by = CY + 66;
+  ctx.fillStyle = 'rgba(0,40,0,0.86)';
+  ctx.fillRect(bx, by, tw, 72);
+  ctx.strokeStyle = 'rgba(255,255,204,' + (0.5 + 0.5*Math.abs(Math.sin(bt/200))).toFixed(2) + ')';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(bx, by, tw, 72);
+  ctx.fillStyle = C.dot;
+  ctx.shadowColor = C.dotGlow; ctx.shadowBlur = 16;
+  ctx.fillText(title, CX, by + 48);
+  ctx.restore();
+}
+
+function drawCorners(now){
+  const nr = nearest();
+  const found = nr.ball && nr.d <= FOUND_R;
+
+  ctx.textAlign = 'left';
+  ctx.font = '600 26px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hud;
+  ctx.fillText('龙珠雷达', 30, 46);
+  ctx.font = '400 14px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudDim;
+  ctx.fillText('DRAGON RADAR', 30, 72);
+  ctx.fillStyle = C.hudFaint;
+  ctx.font = '400 13px "Microsoft YaHei",sans-serif';
+  ctx.fillText('布玛型 · 龙珠电波探测', 30, 94);
+
+  /* 左侧：已找到清单 */
+  if(S.balls.length){
+    const foundList = S.balls.filter(function(b){ return b.foundT; });
+    ctx.font = '400 15px "Microsoft YaHei",sans-serif';
+    ctx.fillStyle = C.hudDim;
+    ctx.fillText('已找到 ' + foundList.length + '/' + S.balls.length, 30, 146);
+    ctx.strokeStyle = 'rgba(120,200,160,0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(30, 160); ctx.lineTo(186, 160); ctx.stroke();
+
+    let fy = 190;
+    for(const b of foundList){
+      ctx.beginPath();
+      ctx.arc(41, fy - 6, 5, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,204,0.92)';
+      ctx.fill();
+      ctx.font = '400 17px "Microsoft YaHei",sans-serif';
+      ctx.fillStyle = C.hud;
+      ctx.fillText(b.name, 58, fy);
+      fy += 31;
+    }
+  }
+
+  ctx.textAlign = 'right';
+  ctx.font = '400 14px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudDim;
+  ctx.fillText('掌机 192.168.1.50 · 热点已连', W - 30, 46);
+
+  const line2 = 'GPS ±4m  ·  ' + S.balls.length + '/7 颗已配置';
+  ctx.font = '400 14px "Microsoft YaHei",sans-serif';
+  const tw2 = ctx.measureText(line2).width;
+  const dotOn = (now % 1600) < 1000;
+  ctx.beginPath();
+  ctx.arc(W - 30 - tw2 - 16, 66, 5, 0, Math.PI*2);
+  ctx.fillStyle = dotOn ? '#3DFF8B' : 'rgba(61,255,139,0.22)';
+  ctx.fill();
+  ctx.fillStyle = C.hudDim;
+  ctx.fillText(line2, W - 30, 71);
+
+  ctx.textAlign = 'left';
+  ctx.font = '400 16px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudDim;
+  ctx.fillText('距最近龙珠', 30, H - 118);
+
+  const dTxt = nr.ball ? (nr.d >= 1000 ? (nr.d/1000).toFixed(2) + ' KM' : nr.d.toFixed(1) + ' M') : '--';
+  ctx.font = '700 58px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.fillStyle = found ? '#FFFFFF' : C.big;
+  ctx.shadowColor = found ? 'rgba(255,255,255,0.55)' : 'rgba(77,255,154,0.45)';
+  ctx.shadowBlur = found ? 26 : 14;
+  ctx.fillText(dTxt, 26, H - 56);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '400 14px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudFaint;
+  ctx.fillText(found ? '目标已在 20M 内 · 长鸣' : (nr.ball ? '目标：' + nr.ball.name : '未配置龙珠'), 30, H - 24);
+
+  ctx.textAlign = 'right';
+  ctx.font = '400 14px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudDim;
+  ctx.fillText('量程', W - 30, H - 118);
+  ctx.font = '700 36px "Segoe UI",sans-serif';
+  ctx.fillStyle = C.hud;
+  ctx.fillText(range() + ' m', W - 28, H - 80);
+  ctx.font = '400 13px "Microsoft YaHei",sans-serif';
+  ctx.fillStyle = C.hudFaint;
+  ctx.fillText('摇杆 / ↑↓ 缩放', W - 30, H - 52);
+  ctx.fillText('1 格 = ' + cellMeters(S.rngNow) + ' m', W - 30, H - 28);
+}
+
+/* ================= 列表 ================= */
+const plist = document.getElementById('plist');
+function renderList(){
+  plist.innerHTML = '';
+  for(const b of S.balls){
+    const d = ballDist(b);
+    const found = !!b.foundT;
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="nm"><i class="dot"' + (found ? ' style="opacity:.35;box-shadow:none;"' : '') + '></i>' +
+      b.num + '号 · ' + b.name + '</span>' +
+      '<span class="ds">' + (found ? '<span class="tag">已找到</span>' :
+      (d >= 1000 ? (d/1000).toFixed(2)+'km' : d.toFixed(1)+'m')) + '</span>';
+    li.onclick = function(){
+      if(mapReady) map.panTo([b.lat, b.lng]);
+    };
+    plist.appendChild(li);
+  }
+  if(!S.balls.length){
+    const li = document.createElement('li');
+    li.style.cursor = 'default';
+    li.innerHTML = '<span style="color:#46586a;">还没有龙珠 — 在地图上点一下放置</span><span></span>';
+    plist.appendChild(li);
+  }
+  // 已找到的地图标记变暗
+  if(mapReady){
+    for(const b of S.balls){
+      const m = ballMarkers.get(b.id);
+      if(m) m.setOpacity(b.foundT ? 0.35 : 1);
+    }
+  }
+}
+
+/* ================= 交互 ================= */
+const btnWalk = document.getElementById('btnWalk');
+function toggleWalkBtn(){
+  btnWalk.textContent = '自动行走：' + (S.walk ? '开' : '关');
+  btnWalk.classList.toggle('on', S.walk);
+}
+document.getElementById('btnStart').onclick = function(){
+  audioOn();
+  S.walk = true;
+  this.textContent = '♪ 声音已开';
+  this.classList.add('on');
+  toggleWalkBtn();
+};
+btnWalk.onclick = function(){ S.walk = !S.walk; toggleWalkBtn(); };
+
+function seedBalls(){
+  const defs = [
+    {dx: 72,  dy: 58},
+    {dx:-148, dy: 96},
+    {dx: 176, dy:-104}
+  ];
+  S.balls = defs.map(function(o, i){
+    const names = ['一','二','三','四','五','六','七'];
+    const ll = offsetLL(S.meLL, o.dx, o.dy);
+    return {id: 'seed' + i, num: i + 1, name: names[i] + '星球', lat: ll.lat, lng: ll.lng, foundT: 0};
+  });
+  if(mapReady){
+    ballMarkers.forEach(function(m){ map.removeLayer(m); });
+    ballMarkers.clear();
+    for(const b of S.balls) addBallMarker(b);
+  }
+}
+
+document.getElementById('btnReset').onclick = function(){
+  S.meLL = {lat: FALLBACK.lat, lng: FALLBACK.lng};
+  S.heading = 0; S.walk = false; S.bannerT = 0; S.zi = 3; S.rngNow = 200;
+  syncMeLayers();
+  if(mapReady) map.setView([S.meLL.lat, S.meLL.lng], 16);
+  seedBalls();
+  toggleWalkBtn();
+  renderList();
+};
+
+document.getElementById('btnLocate').onclick = locateMe;
+document.getElementById('btnClear').onclick = function(){
+  S.balls = []; S.bannerT = 0;
+  if(mapReady){ ballMarkers.forEach(function(m){ map.removeLayer(m); }); ballMarkers.clear(); }
+  renderList();
+};
+
+cvs.addEventListener('pointerdown', function(e){
+  const r = cvs.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * (W / r.width);
+  const my = (e.clientY - r.top) * (H / r.height);
+  if(Math.hypot(mx - KNOB.x, my - KNOB.y) < 66) S.showGrid = !S.showGrid;
+});
+
+window.addEventListener('keydown', function(e){
+  const k = e.key;
+  if(k === 'ArrowUp'){ S.zi = clamp(S.zi + 1, 0, ZOOMS.length - 1); e.preventDefault(); }
+  if(k === 'ArrowDown'){ S.zi = clamp(S.zi - 1, 0, ZOOMS.length - 1); e.preventDefault(); }
+  if(k === 'w' || k === 'W'){ S.meLL = offsetLL(S.meLL, 0, 8); syncMeLayers(); }
+  if(k === 's' || k === 'S'){ S.meLL = offsetLL(S.meLL, 0, -8); syncMeLayers(); }
+  if(k === 'a' || k === 'A'){ S.meLL = offsetLL(S.meLL, -8, 0); syncMeLayers(); }
+  if(k === 'd' || k === 'D'){ S.meLL = offsetLL(S.meLL, 8, 0); syncMeLayers(); }
+  if(k === ' '){ S.walk = !S.walk; toggleWalkBtn(); e.preventDefault(); }
+  if(['w','a','s','d','W','A','S','D'].indexOf(k) >= 0) renderList();
+});
+
+/* ================= 主循环 ================= */
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt, now);
+  drawShell();
+  drawScreen(now);
+  document.getElementById('capRight').textContent =
+    'RANGE ' + range() + 'm · ' + S.balls.length + ' 颗龙珠';
+  requestAnimationFrame(loop);
+}
+
+seedBalls();
+initMap();
+renderList();
+locateMe();
+requestAnimationFrame(loop);
+setInterval(renderList, 300);
+
+})();
+</script>
+</body>
+</html>

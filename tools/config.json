@@ -1,0 +1,6 @@
+{
+    "label": "Dragon Radar",
+    "icon": "icon.png",
+    "launch": "launch.sh",
+    "description": "Dragon Ball Radar with phone GPS"
+}

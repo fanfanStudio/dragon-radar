@@ -1,0 +1,31 @@
+# 构建产物
+build/
+*.o
+*.exe
+*.pdb
+*.elf
+dragonradar
+
+# 预览自检产物
+*.bmp
+preview_*.png
+
+# Android / Gradle
+.gradle/
+android/local.properties
+android/app/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 系统 / 日志
+.DS_Store
+Thumbs.db
+*.log
+__pycache__/

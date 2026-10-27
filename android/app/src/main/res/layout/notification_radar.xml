@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 龙珠雷达常驻通知: 标题/副标题 + 关闭按钮(部分 ROM 不渲染 addAction, 用自定义布局保证可见) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/notif_title"
+            style="@style/TextAppearance.Compat.Notification.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:text="龙珠雷达正在运行" />
+
+        <TextView
+            android:id="@+id/notif_sub"
+            style="@style/TextAppearance.Compat.Notification.Info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:text="定位与龙珠数据下发中" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btn_stop"
+        android:layout_width="wrap_content"
+        android:layout_height="38dp"
+        android:minWidth="76dp"
+        android:layout_marginStart="12dp"
+        android:text="关闭"
+        android:textSize="13sp" />
+</LinearLayout>
