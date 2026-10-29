@@ -16,11 +16,13 @@
 
 #ifndef PREVIEW
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 #include <linux/fb.h>
 #include <linux/input.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/file.h>
 #endif
 
 #ifndef M_PI
@@ -1253,13 +1255,36 @@ static int fbInit(void) {
     fbMapLen = (size_t)fbPitch * (size_t)v.yres_virtual;
     fbMem = (uint8_t *)mmap(NULL, fbMapLen, PROT_READ | PROT_WRITE, MAP_SHARED, fbFd, 0);
     if (fbMem == MAP_FAILED) { fbMem = NULL; perror("mmap fb0"); return -1; }
-    /* 防止系统自动休眠 */
-    FILE *wf = fopen("/sys/power/wake_lock", "w");
-    if (wf) { fputs("dragonradar", wf); fclose(wf); }
-    fprintf(stderr, "[fb] %ux%u %ubpp pitch=%d pages=%d (single, wake_lock on)\n",
+    fprintf(stderr, "[fb] %ux%u %ubpp pitch=%d pages=%d (single)\n",
             v.xres, v.yres, v.bits_per_pixel, fbPitch, fbPages);
     return 0;
 }
+
+/* ---------- 休眠相关 ----------
+ * TrimUI 固件的 keymon 在休眠前(无论空闲超时还是按电源键)会做三件事:
+ *     touch /tmp/system_suspend
+ *     /usr/trimui/bin/kill_apps.sh <pid>    追到最深层子进程 kill -9
+ *     echo mem > /sys/power/state
+ * 这个 kill -9 抓不住信号, 应用必死 —— 这就是"掌机休眠后软件自动退出"的原因。
+ * 实测 /tmp/stay_alive 拦不住这个 kill; /tmp/stay_awake 能拦但连电源键息屏也一起拦掉,
+ * 所以这里都不指望, 真正的解决办法在 launch.sh: 用父进程守着, 唤醒后自动把应用拉回来。
+ * 应用自己只做两件事: 拿一把 wake_lock 让运行期间 CPU 不进浅睡(保证 300ms 下发和蜂鸣),
+ * 并留下 stay_alive 告诉 keymon 别在切应用时顺手清理我们。 */
+static void sleepGuardOn(void) {
+    int fd = open("/tmp/stay_alive", O_CREAT | O_WRONLY, 0644);
+    if (fd >= 0) close(fd);
+    FILE *wf = fopen("/sys/power/wake_lock", "w");
+    if (wf) { fputs("dragonradar", wf); fclose(wf); }
+}
+
+static void sleepGuardOff(void) {
+    unlink("/tmp/stay_alive");
+    FILE *wf = fopen("/sys/power/wake_unlock", "w");
+    if (wf) { fputs("dragonradar", wf); fclose(wf); }
+}
+
+/* kill 命令(非 keymon 的 kill -9)时也要正常收尾, 把标志清掉 */
+static void onQuitSignal(int sig) { (void)sig; quitFlag = 1; }
 
 static void fbPresent(void) {
     if (!fbMem) return;
@@ -1323,8 +1348,12 @@ static void handleEvent(struct input_event *ev, long now) {
             zoomStep(-1);
         else if (c == PHYS_B || c == BTN_SELECT || c == BTN_MODE ||
                  c == KEY_ESC || c == KEY_BACK || c == KEY_BACKSPACE ||
-                 c == KEY_HOME || c == KEY_POWER)
+                 c == KEY_HOME)
             quitFlag = 1;                        /* 物理 B = 退出回启动器 */
+        /* 注意: KEY_POWER(116, 走 axp2202-pek) 绝不能当退出键。
+         * 原来把它列进退出条件, 结果一按电源键本程序就自己退出了,
+         * 看起来像"按电源键就闪退", 而系统休眠流程其实还没开始。
+         * 电源键交给 keymon 处理(息屏/休眠), 本程序继续在后台活着。 */
         else if (c == PHYS_A || c == KEY_ENTER || c == KEY_SPACE)
             showHud = !showHud;                  /* 物理 A = 开关四角文字, 网格保留 */
         else
@@ -1350,6 +1379,13 @@ static void inputPoll(long now) {
 }
 
 int main(void) {
+    /* 单实例保护: 两个进程同时写同一块帧缓冲会互相抢页, 画面撕裂闪跳。
+     * 用 flock 而不是 pidof 判断, 进程被 kill -9 时内核自动释放锁, 不会残留。 */
+    int lockFd = open("/tmp/dragonradar.lock", O_CREAT | O_RDWR, 0644);
+    if (lockFd >= 0 && flock(lockFd, LOCK_EX | LOCK_NB) != 0) {
+        fprintf(stderr, "[main] 已有实例在运行, 本次启动放弃\n");
+        return 0;
+    }
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
         fprintf(stderr, "SDL_Init(audio): %s\n", SDL_GetError());
     audioStart();
@@ -1358,6 +1394,11 @@ int main(void) {
         fprintf(stderr, "fbdev init failed\n");
         return 1;
     }
+    /* 休眠不退出: 让 keymon 别杀我们, 并锁住 CPU */
+    signal(SIGTERM, onQuitSignal);
+    signal(SIGINT, onQuitSignal);
+    signal(SIGHUP, SIG_IGN);
+    sleepGuardOn();
     inputInit();
     bakeBackground();
 
@@ -1382,10 +1423,7 @@ int main(void) {
     }
 
     netClose();
-    {
-        FILE *wf = fopen("/sys/power/wake_unlock", "w");
-        if (wf) { fputs("dragonradar", wf); fclose(wf); }
-    }
+    sleepGuardOff();
     if (fbMem) munmap(fbMem, fbMapLen);
     if (fbFd >= 0) close(fbFd);
     SDL_Quit();
